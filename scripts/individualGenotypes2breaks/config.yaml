@@ -1,0 +1,8 @@
+RAW:
+  /home/thibaut/Gallus/Projects/genotypeTIGER/data/with.fam.f2.call2
+outdir:
+  /home/thibaut/Gallus/Projects/genotypeTIGER/data/TIGER_OUT.call2
+genomeSizeFile:
+  /home/thibaut/Gallus/Projects/genotypeTIGER/data/size.genome
+winsize:
+  50

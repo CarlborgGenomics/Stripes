@@ -1,0 +1,3 @@
+[submodule "scripts/fastq2vcf"]
+	path = scripts/fastq2vcf
+	url = /home/thibaut/Gallus/Projects/genotype-F2
