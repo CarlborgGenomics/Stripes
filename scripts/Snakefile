@@ -1,0 +1,16 @@
+
+## 1 fastq2vcf
+#subworkflow fastq2vcf:
+#    snakefile: "fastq2vcf/Snakefile"
+include "fastq2vcf/Snakefile"
+## 2 vcf2individualGenotypes
+#subworkflow vcf2individualGenotypes:
+#    snakefile: "vcf2individualGenotypes/Snakefile"
+include "vcf2individualGenotypes/Snakefile"
+## 3 individualGenotypes2breaks
+#subworkflow individualGenotypes2breaks:
+#    snakefile: "individualGenotypes2breaks/Snakefile"
+include "individualGenotypes2breaks/Snakefile"
+## 4 figures
+## Do the Subworkflow
+# include "figures/Snakefile"

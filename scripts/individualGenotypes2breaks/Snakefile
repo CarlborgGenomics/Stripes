@@ -2,21 +2,23 @@ configfile: "config.yaml"
 
 import os
 
-wild, = glob_wildcards(os.path.join(config["RAW"], "{sample, .*vcf}"))
-chroms = [e for e in range(1, 25)]
+wild, = glob_wildcards(os.path.join(config["datafolder"], "{indiv}[0]", "{sample, .*vcf}"))
+chroms = [e for e in range(1, config["scaffoldNumber"])]
 
 
 rule all:
     input:
-        expand(os.path.join(config["outdir"], "{file}", "{f}.{chr}.corrected.refined.breaks.txt"),f=wild, chr=chroms),
-        expand(os.path.join(config["outdir"], "{file}", "{file}.{chr}.rough_COs.recomb.txt"),file=wild, chr=chroms)
+        expand(os.path.join(config["datafolder"], "{study}" + config["outsuffix"], "{f}", "{f}.{chr}.corrected.refined.breaks.txt"),\
+               f=wild, chr=chroms, study = indiv),
+        expand(os.path.join(config["datafolder"], "{study}" + config["outsuffix"], "{f}", "{f}.{chr}.rough_COs.recomb.txt"),\
+               f=wild, chr=chroms, study = indiv)
 
 
 rule sort:
     input:
-        os.path.join(config["RAW"], "{file}")
+        os.path.join(config["datafolder"], "{study}", "{file}")
     output:
-        os.path.join(config["RAW"], "{file}.sorted")
+        os.path.join(config["datafolder"], "{study}", "{file}_DIR", "{file}.sorted")
     priority:
         30
     shell:
@@ -26,17 +28,18 @@ rule short:
     input:
         rules.sort.output
     output:
-        os.path.join(config["RAW"], "{file}.{chr}.short")
+        os.path.join(config["datafolder"], "{study}", "{file}_DIR","{file}.{chr}.short")
     params:
         chr = "{chr}"
     shell:
         "awk '$1 == {params.chr} {{print $0}}' {input} > {output}"
-    
+
+        
 rule caller:
     input:
         rules.short.output
     output:
-        os.path.join(config["outdir"], "{file}", "{file}.{chr}.allele_co.txt")
+        os.path.join(config["datafolder"], "{study}" + config["outsuffix"], "{file}", "{file}.{chr}.allele_co.txt")
     priority:
         30
     shell:
@@ -47,7 +50,7 @@ rule estimate:
     input:
         rules.short.output
     output:
-        os.path.join(config["outdir"], "{file}", "{file}.{chr}.frequencies_for_hmm.txt")
+        os.path.join(config["datafolder"], "{study}" + config["outsuffix"], "{file}", "{file}.{chr}.frequencies_for_hmm.txt")
     params:
         winsize = config["winsize"]
     priority:
@@ -60,7 +63,7 @@ rule beta:
     input:
         rules.estimate.output
     output:
-        os.path.join(config["outdir"], "{file}", "{file}.{chr}bmm.intersections.txt")
+        os.path.join(config["datafolder"], "{study}" + config["outsuffix"], "{file}", "{file}.{chr}bmm.intersections.txt")
     priority:
         5
     shell:
@@ -74,7 +77,7 @@ rule prep_prob:
         genomeSize = config["genomeSizeFile"],
         base = rules.caller.output
     output:
-        os.path.join(config["outdir"], "{file}", "{file}.{chr}file_for_probabilities.txt")
+        os.path.join(config["datafolder"], "{study}" + config["outsuffix"], "{file}", "{file}.{chr}file_for_probabilities.txt")
     params:        
         ident = "{file}.{chr}".split(".")[0]
     priority:
@@ -90,8 +93,8 @@ rule hmm_prob:
         genomeSize = config["genomeSizeFile"],
         beta = rules.beta.output
     output:
-        model = os.path.join(config["outdir"], "{file}", "{file}.{chr}hmm_model"),
-        sliding = os.path.join(config["outdir"], "{file}", "{file}.{chr}_sliding_window.breaks.txt")
+        model = os.path.join(config["datafolder"], "{study}" + config["outsuffix"], "{file}", "{file}.{chr}hmm_model"),
+        sliding = os.path.join(config["datafolder"], "{study}" + config["outsuffix"], "{file}", "{file}.{chr}_sliding_window.breaks.txt")
     priority:
         70
     shell:
@@ -107,7 +110,7 @@ rule hmm:
         call = rules.caller.output,
         model = rules.hmm_prob.output.model
     output:
-        hmm = protected(os.path.join(config["outdir"], "{file}", "{file}.{chr}.hmm.out.txt"))
+        hmm = protected(os.path.join(config["datafolder"], "{study}" + config["outsuffix"], "{file}", "{file}.{chr}.hmm.out.txt"))
     priority:
         80
     shell:
@@ -120,8 +123,8 @@ rule prep_co:
         genomeSize = config["genomeSizeFile"],    
         hmm = rules.hmm.output
     output:
-        total = os.path.join(config["outdir"], "{file}", "{file}.{chr}.rough_COs.txt"),
-        partial = os.path.join(config["outdir"], "{file}", "{file}.{chr}.rough_COs.breaks.txt")
+        total = os.path.join(config["datafolder"], "{study}" + config["outsuffix"], "{file}", "{file}.{chr}.rough_COs.txt"),
+        partial = os.path.join(config["datafolder"], "{study}" + config["outsuffix"], "{file}", "{file}.{chr}.rough_COs.breaks.txt")
     params:
         ident = "{file}.{chr}".split(".")[0]
     priority:
@@ -135,9 +138,9 @@ rule refine:
         vcf = rules.short.output,
         breaks = rules.prep_co.output.partial
     output:
-        protected(os.path.join(config["outdir"], "{file}", "{file}.{chr}.rough_COs.refined.recomb.txt")),
-        protected(os.path.join(config["outdir"], "{file}", "{file}.{chr}.rough_COs.refined.breaks.txt")),
-        protected(os.path.join(config["outdir"], "{file}", "{file}.{chr}.rough_COs.recomb.txt"))
+        protected(os.path.join(config["datafolder"], "{study}" + config["outsuffix"], "{file}", "{file}.{chr}.rough_COs.refined.recomb.txt")),
+        protected(os.path.join(config["datafolder"], "{study}" + config["outsuffix"], "{file}", "{file}.{chr}.rough_COs.refined.breaks.txt")),
+        protected(os.path.join(config["datafolder"], "{study}" + config["outsuffix"], "{file}", "{file}.{chr}.rough_COs.recomb.txt"))
     priority:
         100
     shell:
@@ -148,14 +151,14 @@ rule smoother:
     input:
         breaks = rules.prep_co.output.partial
     output:
-        protected(os.path.join(config["outdir"], "{file}", "{file}.{chr}.corrected.refined.breaks.txt"))
+        protected(os.path.join(config["datafolder"], "{study}" + config["outsuffix"], "{file}", "{file}.{chr}.corrected.refined.breaks.txt"))
     shell:
         "perl breaks_smoother.pl -b {input.breaks} -o {output}"
 
 
 ## useful file
-#os.path.join(config["outdir"], "{file}", config["outdir"], "{file}", $id"rough_COs.refined.breaks.txt"
-#os.path.join(config["outdir"], "{file}", config["outdir"], "{file}", $id"corrected.refined.breaks.txt"
-#os.path.join(config["outdir"], "{file}", config["outdir"], "{file}", $id"hmm.out.txt"
+#os.path.join(config["datafolder"], "{study}" + config["outsuffix"], "{file}", config["datafolder"], "{study}" + config["outsuffix"], "{file}", $id"rough_COs.refined.breaks.txt"
+#os.path.join(config["datafolder"], "{study}" + config["outsuffix"], "{file}", config["datafolder"], "{study}" + config["outsuffix"], "{file}", $id"corrected.refined.breaks.txt"
+#os.path.join(config["datafolder"], "{study}" + config["outsuffix"], "{file}", config["datafolder"], "{study}" + config["outsuffix"], "{file}", $id"hmm.out.txt"
 ##  remove unused files
-#ls os.path.join(config["outdir"], "{file}", config["outdir"], "{file}",  | grep -v "corrected" | grep -v "rough_COs" | grep -v "hmm.out.txt$"  | grep -v "chicken_chrSize.txt" | while read var; do rm os.path.join(config["outdir"], "{file}", config["outdir"], "{file}", $var ;done
+#ls os.path.join(config["datafolder"], "{study}" + config["outsuffix"], "{file}", config["datafolder"], "{study}" + config["outsuffix"], "{file}",  | grep -v "corrected" | grep -v "rough_COs" | grep -v "hmm.out.txt$"  | grep -v "chicken_chrSize.txt" | while read var; do rm os.path.join(config["datafolder"], "{study}" + config["outsuffix"], "{file}", config["datafolder"], "{study}" + config["outsuffix"], "{file}", $var ;done

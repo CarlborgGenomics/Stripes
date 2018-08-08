@@ -1,4 +1,4 @@
-read_grand.p <- function(pedigreeTable, vcf.file, py, pathout = NULL, generate.input = TRUE) {
+read_grand.p <- function(pedigreeTable, vcf.file, py, pathout = NULL, generate.input = TRUE, names = "") {
     cat("1.Please make sure the input F_id_h,M_id_h are from HWS and F_id_l,M_id_l are from LWS","\n")
     ## 1. check if the ped is right
     ## not implemented 
@@ -21,26 +21,30 @@ read_grand.p <- function(pedigreeTable, vcf.file, py, pathout = NULL, generate.i
         families = lapply(1:nrow(tmp), getFamily)
         #print(families)
         callScript <- function(family){
-            cmd <- paste(py, "--names /home/thibaut/Gallus/Projects/genotypeTIGER/data/fastq_contig_chr.txt --ID_of", paste(family$of_id, collapse = " "), "--", family$F_id_h, family$M_id_h, family$F_id_l, family$M_id_l, vcf.file, pathout,sep = " ")
+            namescmd <- ""
+            if (nchar(names) > 0){
+                namescmd <- paste0(" --names ", names)
+            }
+            cmd <- paste(py, namescmd," --ID_of", paste(family$of_id, collapse = " "), "--", family$F_id_h, family$M_id_h, family$F_id_l, family$M_id_l, vcf.file, pathout,sep = " ")
             print(cmd)
             system(cmd)
         }
         pbmclapply(families, callScript, mc.cores = getOption("mc.cores", CORES))
     }
-    cat("3. Read in data using fread")
-    readFile <- function(pathFile){
-        if (file.size(pathFile) > 0){
-            #print(pathFile)
-            input <- fread(pathFile)
-            #colnames(input) <- c("chr","pos","ref","alt","f1","f2","m1","m2","of1","of2")
-            return(input)
-        }else {return(NA)}
-    }
-    createPath <- function(x){return(paste0(pathout, "/", x, ".vcf"))}
-    pathList <- lapply(pedigreeTable$id.f2, createPath)
+    #cat("3. Read in data using fread")
+    #readFile <- function(pathFile){
+    #    if (file.size(pathFile) > 0){
+    #        #print(pathFile)
+    #        input <- fread(pathFile)
+    #        #colnames(input) <- c("chr","pos","ref","alt","f1","f2","m1","m2","of1","of2")
+    #        return(input)
+    #    }else {return(NA)}
+    #}
+    #createPath <- function(x){return(paste0(pathout, "/", x, ".vcf"))}
+    #pathList <- lapply(pedigreeTable$id.f2, createPath)
     #pathList <- list.files(pathout, pattern = ".vcf$", full.names = TRUE)
-    inputList <- lapply(pathList, readFile)
-    return(inputList)
+    #inputList <- lapply(pathList, readFile)
+    #return(inputList)
 }
 
 

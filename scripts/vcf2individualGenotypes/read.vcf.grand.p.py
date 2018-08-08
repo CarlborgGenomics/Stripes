@@ -32,7 +32,8 @@ if namesCorr:
         et = e.split()
         namesDict[et[1]] = et[2]
 
-    
+print(namesCorr)
+
 out_folder = args.out_folder 
 
 out_files = dict()
