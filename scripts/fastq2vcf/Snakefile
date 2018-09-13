@@ -1,1 +1,178 @@
-/home/thibaut/Gallus/Projects/genotype-F2/Scripts/Snakefile
+try:
+    configfile: "../config.yaml"
+except:
+    configfile: "config.yaml"
+
+import os
+import random
+
+wild = list()
+wild1, = glob_wildcards(os.path.join(config["Raw_Folder"], "{sample}_forward.fastq.gz"))
+
+# In case we only have the bam for some individuals
+wild2, = glob_wildcards(os.path.join(config["Data_Folder"], "{sample, [^_]*}.bam"))
+
+wild = list(set(wild1 + wild2))
+
+print("There are ", len(wild), " individuals to be treated")
+
+ruleorder: transform > call
+
+print(wild)
+
+rule generateVCF:
+    input:
+        #expand(os.path.join(config["Data_Folder"], "{file}.cleaned.vcf.bgz"), file=wild)
+        os.path.join(config["Data_Folder"], "resequenced.merged.rehead.vcf.bgz"),
+        #os.path.join(config["Data_Folder"], "resequenced.merged.rehead.selected.vcf.bgz")
+
+# BWA
+rule index:
+    input:
+        config["reference"]
+    output:
+        config["reference"] + ".bwt"
+    shell:
+        "bwa index {input}"
+
+rule map:
+    input:
+        forw = os.path.join(config["Raw_Folder"], "{sample}_forward.fastq.gz"),
+        reve = os.path.join(config["Raw_Folder"], "{sample}_reverse.fastq.gz"),
+        ref = config["reference"],
+        index = config["reference"] + ".bwt"
+    output:
+        os.path.join(config["Data_Folder"], "{sample}.bam")
+    threads:
+        4
+    shell:
+        "bwa mem -t {threads} {input.ref} {input.forw} {input.reve} | samtools sort -@{threads} -O BAM -o {output} -"
+
+rule cleanBam:
+    input:
+        "{file}.bam"
+    output:
+        "{file}_call2.bam"
+    shell:
+        "samtools view -bh -q30 -f 0x02 {input} > {output}"
+
+
+# Samtools mpileup (for the complete file and subsamples)
+rule call:
+    input:
+        mapping = os.path.join(config["Data_Folder"], "{sample}_call2.bam"),
+        ref = config["reference"],
+    output:
+        os.path.join(config["Data_Folder"], "{sample}.vcf.gz")
+    priority:
+        50
+    run:
+        shell("bcftools mpileup -Oz -f {input.ref} {input.mapping} -o {output}")
+
+
+# Transform in proper VCF (see  /home/thibaut/Gallus/Projects/F2-simul/Scripts/v0.1/Subsample/test.vcf.gz for example)
+rule transform:
+    priority:
+        100
+    input:
+        rules.call.output
+    output:
+        protected(os.path.join(config["Data_Folder"], "{sample}.cleaned.vcf.bgz"))
+    script:
+        "Call/addGenotypeVcf.py"
+
+# tabix
+rule tabix:
+    input:
+        "{sample}"
+    output:
+        "{sample}.tbi"
+    shell:
+        "tabix -p vcf {input}"
+
+
+# For each proportion we want a mergead VCF
+rule mergeVcf:
+    input:
+        vcfs = expand(os.path.join(config["Data_Folder"], "{file}.cleaned.vcf.bgz"), file=wild),
+        vcfsIndex = expand(os.path.join(config["Data_Folder"], "{file}.cleaned.vcf.bgz.tbi"), file=wild),
+        founders = config["founders"],
+        foundersIndex = config["founders"] + ".tbi"
+    output:
+        os.path.join(config["Data_Folder"], "resequenced.merged.vcf.bgz")
+    threads:
+        4
+    run:
+        i = 0
+        MAXI = 10
+        tomerge = list()
+        out = ""
+        for elem in input.vcfs:
+            if len(tomerge) < MAXI:
+                tomerge.append(elem)
+            else:
+                prevout = out
+                out = "TMPMERGE_" + str(i) + ".vcf"
+                if i > 0:
+                    shell("bcftools merge " + prevout + " " + " ".join(tomerge) + " -O z --threads {threads} -o " + out)
+                    shell("rm " + prevout)
+                    shell("rm " + prevout + ".tbi")
+                else:
+                    shell("bcftools merge " + " ".join(tomerge) + " -O z --threads {threads} -o " + out)
+                shell("tabix -p vcf " + out)
+                i += 1
+                tomerge = list()
+                tomerge.append(elem)
+        if len(tomerge) > 0:
+            prevout = out
+            out = "TMPMERGE_" + str(i) + ".vcf"
+            shell("bcftools merge "  + prevout + " " + " ".join(tomerge) + " -O z --threads {threads} -o " + out)
+            shell("tabix -p vcf " + out)
+        shell("bcftools merge " + out + " {input.founders} -O z --threads {threads} -o {output}")
+        shell("rm " + out)
+        shell("rm " + out + ".tbi")
+
+
+rule final:
+    input:
+        vcfs = expand(os.path.join(config["Data_Folder"], "{file}.cleaned.vcf.bgz"), file=wild),
+        vcf = rules.mergeVcf.output,
+        founders = rules.mergeVcf.input.founders
+    output:
+        os.path.join(config["Data_Folder"], "resequenced.merged.rehead.vcf.bgz")
+    threads:
+        4
+    run:
+        shell("bcftools view -h {input.vcf} | tail -n 1 > foo")
+        foo = open("foo").readline().split()[9:]
+        bar = list()
+        for e in foo:
+            e = os.path.split(e)[1]
+            if len(e.split("_")) > 2:
+                nameT = e.split("_")
+                if nameT[0] == "F2":
+                    e = nameT[1]
+                elif nameT[1] == "F2":
+                    e = nameT[0]
+                else:
+                    print("Problem in the naming scheme", e)
+            if "bam" in e:
+                e = e.split("_")[0]
+            bar.append(e)
+        open("names", "w").write("\n".join(bar))
+        shell("bcftools reheader --threads {threads} -s names {input.vcf} > temp.out && mv temp.out {output}")
+        shell("rm foo names")
+        
+
+rule select:
+    input:
+        vcf = rules.final.output,
+        selected = config["selectBetweenLines"],
+        vcfIndex = [e + ".tbi" for e in rules.final.output],
+    output:
+        os.path.join(config["Data_Folder"], "resequenced.merged.rehead.selected.vcf.bgz")
+    threads:
+        2
+    shell:
+        "bcftools view {input.vcf} --threads {threads} -R {input.selected} -O z -o {output}"
+
