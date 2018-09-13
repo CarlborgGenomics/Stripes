@@ -32,8 +32,6 @@ if namesCorr:
         et = e.split()
         namesDict[et[1]] = et[2]
 
-print(namesCorr)
-
 out_folder = args.out_folder 
 
 out_files = dict()
@@ -146,7 +144,7 @@ with gzip.open(vcf_file, "rb") as vcf:
                             try:
                                 print(nameChr, Pos, HIGH, OFHIGH, LOW, OFLOW, sep="\t", file = out_files[ID_of])
                             except KeyError:
-                                out_files[ID_of] =  open(os.path.join(out_folder, ID_of + ".vcf"), "wt")
+                                out_files[ID_of] =  open(os.path.join(out_folder, ID_of + ".genotype"), "wt")
                                 print(nameChr, Pos, HIGH, OFHIGH, LOW, OFLOW, sep="\t", file = out_files[ID_of])
 
 [outFile.close() for outFile in out_files.values()]

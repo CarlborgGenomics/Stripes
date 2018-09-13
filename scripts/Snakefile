@@ -1,16 +1,235 @@
+configfile: "config.yaml"
+import os
+import random
 
-## 1 fastq2vcf
-#subworkflow fastq2vcf:
-#    snakefile: "fastq2vcf/Snakefile"
-include "fastq2vcf/Snakefile"
-## 2 vcf2individualGenotypes
-#subworkflow vcf2individualGenotypes:
-#    snakefile: "vcf2individualGenotypes/Snakefile"
-include "vcf2individualGenotypes/Snakefile"
-## 3 individualGenotypes2breaks
-#subworkflow individualGenotypes2breaks:
-#    snakefile: "individualGenotypes2breaks/Snakefile"
-include "individualGenotypes2breaks/Snakefile"
-## 4 figures
-## Do the Subworkflow
-# include "figures/Snakefile"
+wild = list()
+wild1, = glob_wildcards(os.path.join(config["Raw_Folder"], "{sample}_forward.fastq.gz"))
+# In case we only have the bam for some individuals
+wild2, = glob_wildcards(os.path.join(config["Data_Folder"], "{sample, [^_t]*}.bam"))
+wild = list(set(wild1 + wild2))
+chroms = [e for e in range(1, config["scaffoldNumber"])]
+print("There are ", len(wild), " individuals to be treated")
+
+
+rule all_complete:
+    input:
+        expand(os.path.join(config["DATA_DIR"], "{study}" + config["TIGER_SUFFIX"], "{f}.genotype", "{f}.genotype.{chr}.corrected.refined.breaks.txt"),\
+               f=wild, chr=chroms, study = config["indiv"].values()),
+        expand(os.path.join(config["DATA_DIR"], "{study}" + config["TIGER_SUFFIX"], "{f}.genotype", "{f}.genotype.{chr}.rough_COs.recomb.txt"),\
+               f=wild, chr=chroms, study = config["indiv"].values())
+
+
+subworkflow fastq2vcf:
+    workdir: "fastq2vcf"
+
+
+rule fastq2vcf:
+    input:
+        fastq2vcf(os.path.join(config["Data_Folder"], "resequenced.merged.rehead.vcf.bgz"))
+    output:
+        os.path.join(config["DATA_DIR"], config["indiv"]["fam"] + config["CALLING_SUFFIX"], "resequenced.merged.rehead.vcf.bgz")
+    shell:
+        "ln -sf {input} {output}"
+
+# tabix
+rule tabix:
+    input:
+        "{sample}"
+    output:
+        "{sample}.tbi"
+    shell:
+        "tabix -p vcf {input}"
+
+
+#rule select:
+#    input:
+#        vcf = os.path.join(config["DATA_DIR"], config["indiv"]["fam"] + config["CALLING_SUFFIX"], "resequenced.merged.rehead.vcf.bgz"),
+#        selected = config["selectBetweenLines"],
+#        vcfIndex = os.path.join(config["DATA_DIR"], config["indiv"]["fam"] + config["CALLING_SUFFIX"], "resequenced.merged.rehead.vcf.bgz") + ".tbi"
+#    output:
+#        os.path.join(config["DATA_DIR"], config["indiv"]["lines"] + config["CALLING_SUFFIX"], "resequenced.merged.rehead.vcf.bgz")
+#    threads:
+#        2 
+#    shell:
+#        "bcftools view {input.vcf} --threads {threads} -R {input.selected} -O z -o {output}"
+
+
+rule vcf2individualgenotypes:
+    output:
+        expand(os.path.join("{{study}}" + config["GENOTYPE_SUFFIX"], "{f}.genotype"), f=wild)
+    params:
+        outFolder = os.path.join("{study}" + config["GENOTYPE_SUFFIX"])
+    input:
+        os.path.join("{study}" + config["CALLING_SUFFIX"], "resequenced.merged.rehead.vcf.bgz")
+    shell:
+        "for e in {output}; do touch $e; done;"
+        "Rscript vcf2individualGenotypes/get.input.F2.within.fam.R " + config["pedigree"] + " {input} " \
+            + config["contigNames"] + " {params.outFolder} -p vcf2individualGenotypes/read.vcf.grand.p.py"
+
+
+rule sort:
+    input:
+        os.path.join(config["DATA_DIR"], "{study}" + config["GENOTYPE_SUFFIX"], "{file}")
+    output:
+        os.path.join(config["DATA_DIR"], "{study}" + config["GENOTYPE_SUFFIX"], "{file}_DIR", "{file}.sorted")
+    priority:
+        30
+    shell:
+        "sort -k 1,1n -k 2,2n {input} > {output}"
+
+rule short:
+    input:
+        rules.sort.output
+    output:
+        os.path.join(config["DATA_DIR"], "{study}" + config["GENOTYPE_SUFFIX"], "{file}_DIR","{file}.chr.{chr}")
+    params:
+        chr = "{chr}"
+    shell:
+        "awk '$1 == {params.chr} {{print $0}}' {input} > {output}"
+
+
+####### TIGER PIPELINE #######
+
+
+rule caller:
+    input:
+        rules.short.output
+    output:
+        os.path.join(config["DATA_DIR"], "{study}" + config["TIGER_SUFFIX"], "{file}", "{file}.{chr}.allele_co.txt")
+    priority:
+        30
+    params:
+        commandName = os.path.join(config["individualGenotypes2breaksPath"], "base_caller.jar")
+    shell:
+        "java -jar  {params.commandName}  -r {input} -o {output} -n bi"  # || touch {output}
+
+
+# get win averages and beta mixtures
+rule estimate:
+    input:
+        rules.short.output
+    output:
+        estimate = os.path.join(config["DATA_DIR"], "{study}" + config["TIGER_SUFFIX"], "{file}", "{file}.{chr}.frequencies_for_hmm.txt"),
+        beta = os.path.join(config["DATA_DIR"], "{study}" + config["TIGER_SUFFIX"], "{file}", "{file}.{chr}bmm.intersections.txt")
+    params:
+        winsize = config["winsize"],
+        commandNameEstimator = os.path.join(config["individualGenotypes2breaksPath"], "allele_freq_estimator.jar"),
+        commandNameBeta = os.path.join(config["individualGenotypes2breaksPath"], "beta_mixture_model.R")
+    priority:
+        4
+    shell:
+        "java -jar {params.commandNameEstimator}  -r {input} -o {output.estimate} -n bi -w {params.winsize} &&"
+        "Rscript --vanilla {params.commandNameBeta}  {output.estimate}  {output.beta}"    # || touch {output.beta} {output.estimate}
+        
+# get beta mixtures
+#rule beta:
+#    input:
+#        rules.estimate.output
+#    output:
+    #     os.path.join(config["DATA_DIR"], "{study}" + config["TIGER_SUFFIX"], "{file}", "{file}.{chr}bmm.intersections.txt")
+    # params:
+    #     commandName = os.path.join(config["individualGenotypes2breaksPath"], "beta_mixture_model.R")
+    # priority:
+    #     5
+    # shell:
+    #     "Rscript --vanilla {params.commandName}  {input}  {output}"
+
+
+# get HMM probablities
+rule prep_prob:
+    input:
+        vcf = rules.short.output,
+        genomeSize = config["genomeSizeFile"],
+        base = rules.caller.output
+    output:
+        os.path.join(config["DATA_DIR"], "{study}" + config["TIGER_SUFFIX"], "{file}", "{file}.{chr}file_for_probabilities.txt")
+    params:        
+        ident = "{file}.{chr}".split(".")[0],
+        commandName = os.path.join(config["individualGenotypes2breaksPath"], "prep_prob.pl")
+    priority:
+        60
+    shell:
+        "perl {params.commandName} -s {params.ident} -m {input.vcf} -b {input.base} -c {input.genomeSize} -o {output}"   # || touch {output}
+          
+# Calculate transmission and emission probabilities for the HMM
+rule hmm_prob:
+    input:
+        freq = rules.estimate.output.estimate,
+        hmm_prob = rules.prep_prob.output,
+        genomeSize = config["genomeSizeFile"],
+        beta = rules.estimate.output.beta
+    output:
+        model = os.path.join(config["DATA_DIR"], "{study}" + config["TIGER_SUFFIX"], "{file}", "{file}.{chr}hmm_model"),
+        sliding = os.path.join(config["DATA_DIR"], "{study}" + config["TIGER_SUFFIX"], "{file}", "{file}.{chr}_sliding_window.breaks.txt")
+    params:
+        commandName = os.path.join(config["individualGenotypes2breaksPath"], "hmm_prob.pl")
+    priority:
+        70
+    shell:
+        "tmp={output.sliding}; \
+        tmp1=${{tmp%_*}}; \
+        outShort=${{tmp1%_*}}; \
+        perl {params.commandName}  -s {input.freq} -p {input.hmm_prob} -o $outShort -a {input.beta} -c {input.genomeSize}"    # || touch {output.model} {output.sliding}
+
+
+## apply HMM
+rule hmm:
+    input:
+        call = rules.caller.output,
+        model = rules.hmm_prob.output.model
+    output:
+        hmm = os.path.join(config["DATA_DIR"], "{study}" + config["TIGER_SUFFIX"], "{file}", "{file}.{chr}.hmm.out.txt")
+    params:
+        commandName = os.path.join(config["individualGenotypes2breaksPath"], "hmm_play.jar")
+    priority:
+        80
+    shell:
+        "java -jar {params.commandName} -r {input.call} -o {output.hmm} -t bi -z {input.model}"    # || touch {output.hmm}
+
+## get co
+rule prep_co:
+    input:
+        vcf = rules.short.output,
+        genomeSize = config["genomeSizeFile"],    
+        hmm = rules.hmm.output
+    output:
+        total = os.path.join(config["DATA_DIR"], "{study}" + config["TIGER_SUFFIX"], "{file}", "{file}.{chr}.rough_COs.txt"),
+        partial = os.path.join(config["DATA_DIR"], "{study}" + config["TIGER_SUFFIX"], "{file}", "{file}.{chr}.rough_COs.breaks.txt"),
+        smoothed = os.path.join(config["DATA_DIR"], "{study}" + config["TIGER_SUFFIX"], "{file}", "{file}.{chr}.corrected.refined.breaks.txt")
+    params:
+        ident = "{file}.{chr}".split(".")[0],
+        commandName = os.path.join(config["individualGenotypes2breaksPath"], "prepare_break.pl"),
+        commandNameSmooth = os.path.join(config["individualGenotypes2breaksPath"], "breaks_smoother.pl")
+    priority:
+        90
+    shell:
+        "perl {params.commandName} -s {params.ident} -m {input.vcf} -b {input.hmm} -c  {input.genomeSize} -o {output.total} &&"
+        "perl {params.commandNameSmooth} -b {output.partial} -o {output.smoothed}"    # || touch {output.total} {output.partial} {output.smoothed}
+
+## refine co
+rule refine:
+    input:
+        vcf = rules.short.output,
+        breaks = rules.prep_co.output.partial
+    output:
+        os.path.join(config["DATA_DIR"], "{study}" + config["TIGER_SUFFIX"], "{file}", "{file}.{chr}.rough_COs.refined.recomb.txt"),
+        os.path.join(config["DATA_DIR"], "{study}" + config["TIGER_SUFFIX"], "{file}", "{file}.{chr}.rough_COs.refined.breaks.txt"),
+        os.path.join(config["DATA_DIR"], "{study}" + config["TIGER_SUFFIX"], "{file}", "{file}.{chr}.rough_COs.recomb.txt")
+    params:
+        commandName = os.path.join(config["individualGenotypes2breaksPath"], "refine_recombination_break.pl")
+    priority:
+        100
+    shell:
+        "perl {params.commandName} {input.vcf} {input.breaks}"    # || touch {output}
+
+## smooth co
+#rule smoother:
+#    input:
+#        breaks = rules.prep_co.output.partial
+#    output:
+#        protected(os.path.join(config["DATA_DIR"], "{study}" + config["TIGER_SUFFIX"], "{file}", "{file}.{chr}.corrected.refined.breaks.txt"))
+#    params:
+#        commandName = os.path.join(config["individualGenotypes2breaksPath"], "breaks_smoother.pl")
+#    shell:
+#        "perl {params.commandName} -b {input.breaks} -o {output}"
+

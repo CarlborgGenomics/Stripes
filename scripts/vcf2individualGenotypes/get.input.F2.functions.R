@@ -1,4 +1,4 @@
-read_grand.p <- function(pedigreeTable, vcf.file, py, pathout = NULL, generate.input = TRUE, names = "") {
+read_grand.p <- function(pedigreeTable, vcf.file, py, pathout = NULL, generate.input = TRUE, names = "", CORES = 5) {
     cat("1.Please make sure the input F_id_h,M_id_h are from HWS and F_id_l,M_id_l are from LWS","\n")
     ## 1. check if the ped is right
     ## not implemented 
