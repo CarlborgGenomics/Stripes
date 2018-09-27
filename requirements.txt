@@ -1,0 +1,16 @@
+# This file may be used to create an environment using:
+# $ conda create --name <env> --file <this file>
+# platform: linux-64
+bcftools=1.8=1
+biopython=1.70=np112py36_1
+blas=1.0=mkl
+bzip2=1.0.6=1
+numpy=1.12.1=py36he24570b_1
+pandas=0.23.1=py36_0
+python=3.6.6=h5001a0f_0
+pyyaml=3.12=py36_1
+r=3.4.1=r3.4.1_0
+snakemake=5.1.4=py36_0
+yaml=0.1.7=0
+yarl=1.2.6=py36h470a237_0
+zlib=1.2.11=0
