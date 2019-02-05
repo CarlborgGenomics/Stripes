@@ -87,4 +87,4 @@ The downstream analysis of this pipeline is described in <https://github.com/Car
 
 Why use Stripes ?
 
-A lot of methods exists if you don't have a pedigree or for outbred populations, like using TIGER directy for example
+A lot of methods exists if you don't have a pedigree or for outbred populations, like using TIGER directy for example but to our knowledge Stripes is the only pipeline that take into account the pedigree and the fact that the populations are outbred to do QTL mapping using low-coverage data.
