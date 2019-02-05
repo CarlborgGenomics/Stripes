@@ -10,7 +10,7 @@ wild = list()
 wild1, = glob_wildcards(os.path.join(config["Raw_Folder"], "{sample}_forward.fastq.gz"))
 
 # In case we only have the bam for some individuals
-wild2, = glob_wildcards(os.path.join(config["Data_Folder"], "{sample, [^_]*}.bam"))
+wild2, = glob_wildcards(os.path.join(config["DATA_DIR"], config["Data_Folder"], "{sample, [^_]*}.bam"))
 
 wild = list(set(wild1 + wild2))
 
@@ -18,13 +18,13 @@ print("There are ", len(wild), " individuals to be treated")
 
 ruleorder: transform > call
 
-print(wild)
+
 
 rule generateVCF:
     input:
-        #expand(os.path.join(config["Data_Folder"], "{file}.cleaned.vcf.bgz"), file=wild)
-        os.path.join(config["Data_Folder"], "resequenced.merged.rehead.vcf.bgz"),
-        #os.path.join(config["Data_Folder"], "resequenced.merged.rehead.selected.vcf.bgz")
+        #expand(os.path.join(config["DATA_DIR"], config["Data_Folder"], "{file}.cleaned.vcf.bgz"), file=wild)
+        os.path.join(config["DATA_DIR"], config["Data_Folder"], "resequenced.merged.rehead.vcf.bgz"),
+        #os.path.join(config["DATA_DIR"], config["Data_Folder"], "resequenced.merged.rehead.selected.vcf.bgz")
 
 # BWA
 rule index:
@@ -42,7 +42,7 @@ rule map:
         ref = config["reference"],
         index = config["reference"] + ".bwt"
     output:
-        os.path.join(config["Data_Folder"], "{sample}.bam")
+        os.path.join(config["DATA_DIR"], config["Data_Folder"], "{sample}.bam")
     threads:
         4
     shell:
@@ -60,10 +60,10 @@ rule cleanBam:
 # Samtools mpileup (for the complete file and subsamples)
 rule call:
     input:
-        mapping = os.path.join(config["Data_Folder"], "{sample}_call2.bam"),
+        mapping = os.path.join(config["DATA_DIR"], config["Data_Folder"], "{sample}_call2.bam"),
         ref = config["reference"],
     output:
-        os.path.join(config["Data_Folder"], "{sample}.vcf.gz")
+        os.path.join(config["DATA_DIR"], config["Data_Folder"], "{sample}.vcf.gz")
     priority:
         50
     run:
@@ -77,7 +77,7 @@ rule transform:
     input:
         rules.call.output
     output:
-        protected(os.path.join(config["Data_Folder"], "{sample}.cleaned.vcf.bgz"))
+        protected(os.path.join(config["DATA_DIR"], config["Data_Folder"], "{sample}.cleaned.vcf.bgz"))
     script:
         "Call/addGenotypeVcf.py"
 
@@ -94,12 +94,12 @@ rule tabix:
 # For each proportion we want a mergead VCF
 rule mergeVcf:
     input:
-        vcfs = expand(os.path.join(config["Data_Folder"], "{file}.cleaned.vcf.bgz"), file=wild),
-        vcfsIndex = expand(os.path.join(config["Data_Folder"], "{file}.cleaned.vcf.bgz.tbi"), file=wild),
+        vcfs = expand(os.path.join(config["DATA_DIR"], config["Data_Folder"], "{file}.cleaned.vcf.bgz"), file=wild),
+        vcfsIndex = expand(os.path.join(config["DATA_DIR"], config["Data_Folder"], "{file}.cleaned.vcf.bgz.tbi"), file=wild),
         founders = config["founders"],
         foundersIndex = config["founders"] + ".tbi"
     output:
-        os.path.join(config["Data_Folder"], "resequenced.merged.vcf.bgz")
+        os.path.join(config["DATA_DIR"], config["Data_Folder"], "resequenced.merged.vcf.bgz")
     threads:
         4
     run:
@@ -135,11 +135,11 @@ rule mergeVcf:
 
 rule final:
     input:
-        vcfs = expand(os.path.join(config["Data_Folder"], "{file}.cleaned.vcf.bgz"), file=wild),
+        vcfs = expand(os.path.join(config["DATA_DIR"], config["Data_Folder"], "{file}.cleaned.vcf.bgz"), file=wild),
         vcf = rules.mergeVcf.output,
         founders = rules.mergeVcf.input.founders
     output:
-        os.path.join(config["Data_Folder"], "resequenced.merged.rehead.vcf.bgz")
+        os.path.join(config["DATA_DIR"], config["Data_Folder"], "resequenced.merged.rehead.vcf.bgz")
     threads:
         4
     run:
@@ -170,7 +170,7 @@ rule select:
         selected = config["selectBetweenLines"],
         vcfIndex = [e + ".tbi" for e in rules.final.output],
     output:
-        os.path.join(config["Data_Folder"], "resequenced.merged.rehead.selected.vcf.bgz")
+        os.path.join(config["DATA_DIR"], config["Data_Folder"], "resequenced.merged.rehead.selected.vcf.bgz")
     threads:
         2
     shell:

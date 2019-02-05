@@ -5,7 +5,7 @@ import random
 wild = list()
 wild1, = glob_wildcards(os.path.join(config["Raw_Folder"], "{sample}_forward.fastq.gz"))
 # In case we only have the bam for some individuals
-wild2, = glob_wildcards(os.path.join(config["Data_Folder"], "{sample, [^_t]*}.bam"))
+wild2, = glob_wildcards(os.path.join(config["DATA_DIR"], config["Data_Folder"], "{sample, [^_]*}.bam"))
 wild = list(set(wild1 + wild2))
 chroms = [e for e in range(1, config["scaffoldNumber"])]
 print("There are ", len(wild), " individuals to be treated")
@@ -25,7 +25,7 @@ subworkflow fastq2vcf:
 
 rule fastq2vcf:
     input:
-        fastq2vcf(os.path.join(config["Data_Folder"], "resequenced.merged.rehead.vcf.bgz"))
+        fastq2vcf(os.path.join(config["DATA_DIR"], config["Data_Folder"], "resequenced.merged.rehead.vcf.bgz"))
     output:
         os.path.join(config["DATA_DIR"], config["indiv"]["fam"] + config["CALLING_SUFFIX"], "resequenced.merged.rehead.vcf.bgz")
     shell:
@@ -233,3 +233,14 @@ rule refine:
 #    shell:
 #        "perl {params.commandName} -b {input.breaks} -o {output}"
 
+
+
+rule figure:
+    input:
+        os.path.join(config["DATA_DIR"], "{study}" + config["TIGER_SUFFIX"], "{f}.genotype")
+    output:
+        os.path.join(config["DATA_DIR"], "{study}" + config["FIGURE_SUFFIX"], "{f}.pdf")
+    params:
+        outFolder = os.path.split("{output}")[0]
+    shell:
+        "Rscript figures/breaks2pdf.R {f} {params.outFolder}"

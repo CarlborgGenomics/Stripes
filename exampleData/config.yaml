@@ -1,0 +1,66 @@
+# The reference genome, used for the mapping and for calling the SNPs
+reference:
+  /home/thibaut/Gallus/Projects/genotypeTIGER/RAW/galgal5_usethis.fa
+
+# Folder containing the fastq (considered as paired and named {sample}_forward.fastq.gz and {sample}_reverse.fastq.gz)
+Raw_Folder:
+  /home/thibaut/Gallus/Projects/genotypeTIGER/exampleData
+
+selectBetweenLines:
+  foo
+
+# The VCF file of founders (created separatly with a more classic approach, in our case GATK and a joined call)
+founders:
+  /home/thibaut/Gallus/Projects/genotypeTIGER/exampleData/F0.chr6.vcf.bgz
+
+DATA_DIR:
+  /home/thibaut/Gallus/Projects/genotypeTIGER/exampleData
+
+Data_Folder:
+  VCF
+
+# Was used to test the difference of quality in pipeline using markers fixed in family and in line
+indiv:
+  fam: with.fam.f2.call2.
+#  lines: with.lines.f2.call2.
+
+# To create a folder of the VCFs
+CALLING_SUFFIX:
+  Call
+
+# To create a folder for individual genotypes per sample
+GENOTYPE_SUFFIX:
+  Genotype
+
+
+# The results of TIGER, one subfolder per sample, splited by chromosomes
+TIGER_SUFFIX:
+  TIGER_OUT
+
+
+FIGURE_SUFFIX:
+  figures
+
+genomeSizeFile:
+  /home/thibaut/Gallus/Projects/genotypeTIGER/exampleData/size.genome
+
+# Number of SNP per windows
+winsize:
+  50
+
+# Number of scaffolds to treat (Take the scaffold numbered (1-scaffoldNumber), the methods is not working well for smaller scaffold
+scaffoldNumber:
+  25
+
+# The pedigree file (see example for format)
+pedigree:
+  /home/thibaut/Gallus/Projects/genotypeTIGER/exampleData/pedigree.txt
+
+# File containing the full names (from the reference, a rank (col 3) and the size of the chromosomes
+contigNames:
+  /home/thibaut/Gallus/Projects/genotypeTIGER/exampleData/Index_fastq_contig_chr.txt
+
+
+# If not in the script folder use an absolute path
+individualGenotypes2breaksPath:
+  individualGenotypes2breaks
